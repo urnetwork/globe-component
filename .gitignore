@@ -1,0 +1,12 @@
+**/bin
+**/build
+**/.DS_Store
+**/test.out
+
+# binaries
+temp/*
+
+.direnv
+
+node_modules
+bundle.js
