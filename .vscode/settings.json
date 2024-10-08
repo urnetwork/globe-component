@@ -1,5 +1,10 @@
 {
     "cSpell.words": [
+        "ipinfo",
         "topojson"
-    ]
+    ],
+    "[html]": {
+        "typescript.autoClosingTags": true,
+        "files.trimTrailingWhitespace": true,
+    },
 }

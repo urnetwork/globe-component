@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "rollup -c",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "all": "rollup -c && vite"
   },
   "keywords": [],
   "author": "URNetwork",
