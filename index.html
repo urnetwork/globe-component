@@ -1,12 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8">
     <title>Globe with Highlighted Point</title>
-    
-</head>
-<body>
+    <style>
+      body { font-family: Arial, sans-serif; }
+        .ip-info { max-width: 600px; margin: 50px auto; }
+        .ip-info h1 { text-align: center; }
+        .ip-info ul { list-style-type: none; padding: 0; }
+        .ip-info li { background: #f9f9f9; margin: 5px 0; padding: 10px; border-radius: 4px; }
+        .ip-info li strong { display: inline-block; width: 100px; }
+    </style>
+  </head>
+  <body>
     <script type="module" src="./bundle.js"></script>
-    <globe-component longitude="-74.0060" latitude="40.7128" style="width: 200; height: 200px;"></globe-component>
-</body>
+    <globe-component id="globe" longitude="-74.0060" latitude="40.7128" style="width: 200; height: 200px;"></globe-component>
+    <div class="ip-info" id="ipinfo">Loading your IP information...</div>
+    <script>
+      function displayIPInfo(data) {
+
+          const globe = document.getElementById('globe');
+          globe.setAttribute('latitude', data.loc.split(',')[0]);
+          globe.setAttribute('longitude', data.loc.split(',')[1]);
+
+            var output = '<h1>Your IP Information</h1><ul>';
+            for (var key in data) {
+                if (data.hasOwnProperty(key)) {
+                    output += '<li><strong>' + key + ':</strong> ' + data[key] + '</li>';
+                }
+            }
+            output += '</ul>';
+            document.getElementById('ipinfo').innerHTML = output;
+        }
+    </script>
+    <script src="https://ipinfo.io?callback=displayIPInfo"></script>
+  </body>
 </html>
