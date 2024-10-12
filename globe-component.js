@@ -24,22 +24,23 @@ import worldData from './data/world-110m.v1.json';
  * - removeLocation(name): Removes a location from the globe by name.
  * - addArc(arc): Adds a new arc between two locations.
  * - removeArc(label): Removes an existing arc based on its label.
+ * - updateArc(source, target, newColor, newLabel): Updates the color and label of an existing arc based on source and target.
  * 
  * Usage:
  * <globe-component
- *   longitude="-74.0060"
- *   latitude="40.7128"
+ *   longitude="8.5500"
+ *   latitude="47.3667"
  *   locations='[
- *     {"name": "New York", "coordinates": [-74.0060, 40.7128]},
- *     {"name": "London", "coordinates": [-0.1278, 51.5074]},
- *     {"name": "Tokyo", "coordinates": [139.6917, 35.6895]},
- *     {"name": "Sydney", "coordinates": [151.2093, -33.8688]}
+ *     {"name": "Paris", "coordinates": [2.3488,48.8534]},
+ *     {"name": "London", "coordinates": [-0.1257,51.5085]},
+ *     {"name": "Milan", "coordinates": [9.1895,45.4643]},
+ *     {"name": "Zurich", "coordinates": [8.5500,47.3667]},
+ *     {"name": "Frankfurt", "coordinates": [8.6842,50.1155]}
  *   ]'
  *   arcs='[
- *     {"source": "New York", "target": "London", "color": "green", "label": "NY-LON"},
- *     {"source": "Tokyo", "target": "Sydney", "color": "purple", "label": "TOK-SYD"}
+ *     {"source": "Zurich", "target": "Paris", "color": "green", "label": "Zurich-Paris"}
  *   ]'
- *   style="width: 600px; height: 600px;"
+ *   style="width: 400px; height: 400px;"
  * ></globe-component>
  */
 class GlobeComponent extends LitElement {
@@ -110,7 +111,7 @@ class GlobeComponent extends LitElement {
       opacity: 0.8; /* Slight opacity for better visibility */
     }
     .arc-label {
-      font-size: 14px; /* Increased font size */
+      font-size: 14px; /* Consistent with point labels */
       fill: yellow; /* Changed to yellow for better contrast */
       stroke: black; /* Outline for readability */
       stroke-width: 0.5px;
@@ -120,6 +121,13 @@ class GlobeComponent extends LitElement {
       stroke: #fff;
       stroke-width: 1px;
       cursor: pointer;
+    }
+    .point-label {
+      font-size: 14px; /* Updated to match arc labels */
+      fill: black;
+      stroke: white;
+      stroke-width: 0.5px;
+      pointer-events: none; /* Prevent labels from capturing pointer events */
     }
     .tooltip {
       pointer-events: none;
@@ -132,21 +140,22 @@ class GlobeComponent extends LitElement {
 
   constructor() {
     super();
-    // Default center point (New York City)
-    this.longitude = -74.0060;
-    this.latitude = 40.7128;
+    // Default center point (Zurich)
+    this.longitude = 8.5500;
+    this.latitude = 47.3667;
 
     // Default locations
     this.locations = [
-      { name: 'New York', coordinates: [-74.0060, 40.7128] },
-      { name: 'London', coordinates: [-0.1278, 51.5074] },
-      { name: 'Tokyo', coordinates: [139.6917, 35.6895] },
+      { name: 'Paris', coordinates: [2.3488, 48.8534] },
+      { name: 'London', coordinates: [-0.1257, 51.5085] },
+      { name: 'Milan', coordinates: [9.1895, 45.4643] },
+      { name: 'Zurich', coordinates: [8.5500, 47.3667] },
+      { name: 'Frankfurt', coordinates: [8.6842, 50.1155] }
     ];
 
     // Default arcs
     this.arcs = [
-      { "source": "New York", "target": "London", "color": "green", "label": "NY-LON" },
-      { "source": "Tokyo", "target": "London", "color": "purple", "label": "TOK-SYD" }
+      { source: 'Zurich', target: 'Paris', color: 'green', label: 'Zurich-Paris' }
     ];
 
     // Placeholder for zoom behavior
@@ -178,7 +187,7 @@ class GlobeComponent extends LitElement {
     const height = this.offsetHeight;
 
     // Calculate initial scale based on width and height
-    this.initialScale = Math.min(width, height) / 2.1;
+    this.initialScale = Math.min(width, height) / 2; // Ensures the globe fills the container
 
     // Initialize the projection
     this.projection = d3.geoOrthographic()
@@ -222,10 +231,10 @@ class GlobeComponent extends LitElement {
     // Draw arcs after land and graticules
     this.drawArcs();
 
-    // Highlight all points
+    // Highlight all points with labels
     this.highlightPoints();
 
-    // Make the globe draggable
+    // Make the globe draggable with dynamic rotation speed
     this.makeGlobeDraggable();
 
     // Adjust initial projection to fit all locations
@@ -238,8 +247,9 @@ class GlobeComponent extends LitElement {
    * @param {Number} height - Height of the SVG container.
    */
   initializeZoom(width, height) {
-    // Define the zoom behavior with scale limits
-    const minScale = this.initialScale / 2; // Prevent zooming out too much
+    // Define the zoom behavior with updated scale limits
+    // minScale is now set to finalScale / 10 in adjustProjectionToFitLocations
+    const minScale = this.initialScale / 10; // Allow greater zooming out
     const maxScale = this.initialScale * 3; // Allow more zooming in
 
     this.zoom = d3.zoom()
@@ -289,10 +299,10 @@ class GlobeComponent extends LitElement {
   }
 
   /**
-   * Highlights all visible points on the globe.
+   * Highlights all visible points on the globe with labels.
    */
   highlightPoints() {
-    // Remove existing points
+    // Remove existing points and labels
     this.svg.selectAll('g.point-group').remove();
 
     // Iterate over all locations
@@ -307,10 +317,11 @@ class GlobeComponent extends LitElement {
         if (angle < Math.PI / 2) { // Check if point is on the front side
           const point = this.projection([lon, lat]);
 
-          // Create a group for point and tooltip
+          // Create a group for point and label
           const pointGroup = this.svg.append('g')
             .attr('class', 'point-group');
 
+          // Draw the point
           pointGroup.append('circle')
             .attr('class', 'point')
             .attr('cx', point[0])
@@ -318,21 +329,14 @@ class GlobeComponent extends LitElement {
             .attr('r', 5)
             .attr('fill', 'red')
             .attr('stroke', '#fff')
-            .attr('stroke-width', 1)
-            .on('mouseover', () => {
-              pointGroup.append('text')
-                .attr('class', 'tooltip')
-                .attr('x', point[0] + 10)
-                .attr('y', point[1])
-                .text(location.name)
-                .style('font-size', '12px')
-                .style('fill', 'black')
-                .style('stroke', 'white')
-                .style('stroke-width', '0.5px');
-            })
-            .on('mouseout', () => {
-              pointGroup.select('text.tooltip').remove();
-            });
+            .attr('stroke-width', 1);
+
+          // Add the label
+          pointGroup.append('text')
+            .attr('class', 'point-label')
+            .attr('x', point[0] + 7) // Position label slightly to the right of the point
+            .attr('y', point[1] + 4) // Vertically center the label
+            .text(location.name);
         }
       } else {
         console.warn(`Invalid coordinates for location: ${location.name}`);
@@ -438,15 +442,11 @@ class GlobeComponent extends LitElement {
         return `translate(${x},${y})`;
       })
       .text(d => d.label)
-      .style('font-size', '14px') // Increased font size for better readability
-      .style('fill', 'yellow') // Changed to yellow for better contrast
-      .style('stroke', 'black') // Outline for readability
-      .style('stroke-width', '0.5px')
       .attr('pointer-events', 'none'); // Prevent labels from capturing pointer events
   }
 
   /**
-   * Makes the globe draggable to rotate.
+   * Makes the globe draggable to rotate with rotation speed based on zoom level.
    */
   makeGlobeDraggable() {
     let startRotate;
@@ -461,7 +461,17 @@ class GlobeComponent extends LitElement {
           const dx = event.x - startRotate[0];
           const dy = event.y - startRotate[1];
           const rotation = this.projection.rotate();
-          this.projection.rotate([rotation[0] + dx / 2, rotation[1] - dy / 2]);
+
+          // Get the current zoom scale
+          const currentZoom = this.getZoom();
+
+          // Adjust rotation speed based on zoom level
+          const rotationFactor = 100 / currentZoom; // Increased numerator for better responsiveness
+
+          this.projection.rotate([
+            rotation[0] + (dx / 2) * rotationFactor,
+            rotation[1] - (dy / 2) * rotationFactor
+          ]);
 
           // Update paths and points
           this.svg.selectAll('path').attr('d', this.path);
@@ -514,18 +524,23 @@ class GlobeComponent extends LitElement {
     const radius = Math.min(this.offsetWidth, this.offsetHeight) / 2;
     const requiredScale = (marginFactor * radius) / Math.sin(maxDistance);
 
+    // **Modified Part: Remove or Lower minProjectionScale**
+    // Previously: const minProjectionScale = this.offsetWidth / 2;
+    // Previously: const finalScale = Math.max(requiredScale, minProjectionScale);
+    const finalScale = requiredScale; // Set finalScale solely based on requiredScale
+
     // Update projection's rotation to center on centroid
     this.projection.rotate([-centroid[0], -centroid[1]]);
 
     // Update projection's scale
-    this.projection.scale(requiredScale);
+    this.projection.scale(finalScale);
 
     // Update path with the new projection
     this.path = d3.geoPath().projection(this.projection);
 
     // Update zoom's scaleExtent based on new scale
-    const minScale = requiredScale / 2;
-    const maxScale = requiredScale * 3;
+    const minScale = finalScale / 10; // Allow zooming out further
+    const maxScale = finalScale * 3; // Allow more zooming in
     this.zoom.scaleExtent([minScale, maxScale]);
 
     // Re-render the globe, arcs, and points
@@ -549,12 +564,12 @@ class GlobeComponent extends LitElement {
     this.projection.translate([width / 2, height / 2]);
 
     // Recalculate initial scale
-    this.initialScale = Math.min(width, height) / 2.1;
+    this.initialScale = Math.min(width, height) / 2; // Ensures the globe fills the container
     this.projection.scale(this.initialScale);
 
-    // Update zoom scale extent based on new size
-    const minScale = this.initialScale / 2;
-    const maxScale = this.initialScale * 3;
+    // Update zoom scale extent based on new scale
+    const minScale = this.initialScale / 10; // Allow greater zooming out
+    const maxScale = this.initialScale * 3; // Allow more zooming in
     this.zoom.scaleExtent([minScale, maxScale]);
 
     // Update the SVG size
@@ -632,6 +647,11 @@ class GlobeComponent extends LitElement {
    */
   addLocation(location) {
     if (location && Array.isArray(location.coordinates) && location.coordinates.length === 2) {
+      const [lon, lat] = location.coordinates;
+      if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        console.warn('Invalid longitude or latitude values:', location);
+        return;
+      }
       this.locations = [...this.locations, location];
     } else {
       console.warn('Invalid location format:', location);
@@ -692,6 +712,40 @@ class GlobeComponent extends LitElement {
   removeArc(label) {
     this.arcs = this.arcs.filter(arc => arc.label !== label);
   }
+
+  /**
+   * Updates the color and label of an existing arc based on its source and target.
+   * @param {String} source - The name of the source location.
+   * @param {String} target - The name of the target location.
+   * @param {String} newColor - The new color for the arc.
+   * @param {String} newLabel - The new label for the arc.
+   */
+  updateArc(source, target, newColor, newLabel) {
+    // Find all arcs matching the source and target
+    const matchingArcs = this.arcs.filter(arc => arc.source === source && arc.target === target);
+
+    if (matchingArcs.length === 0) {
+      console.warn(`No arc found between "${source}" and "${target}".`);
+      return;
+    }
+
+    if (matchingArcs.length > 1) {
+      console.warn(`Multiple arcs found between "${source}" and "${target}". Please ensure uniqueness or extend the method to handle multiple arcs.`);
+      return;
+    }
+
+    // Update the arc's color and label
+    const arcIndex = this.arcs.findIndex(arc => arc.source === source && arc.target === target);
+    this.arcs[arcIndex].color = newColor;
+    this.arcs[arcIndex].label = newLabel;
+
+    // Trigger re-rendering by updating the arcs array
+    this.arcs = [...this.arcs];
+
+    // Re-render the arcs
+    this.drawArcs();
+  }
+
 }
 
 customElements.define('globe-component', GlobeComponent);
