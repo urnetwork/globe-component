@@ -9,18 +9,21 @@ import worldData from './data/world-110m.v1.json';
  * GlobeComponent
  * 
  * A reusable Web Component that renders an interactive 3D globe using D3.js and TopoJSON.
- * It highlights specified locations and draws arcs between them.
+ * It highlights specified locations and allows manual creation of arcs between them with labels and colors.
  * 
  * Properties:
  * - longitude (Number): Longitude of the initial center point.
  * - latitude (Number): Latitude of the initial center point.
- * - locations (Array): Array of location objects to highlight and connect with arcs.
+ * - locations (Array): Array of location objects to highlight.
+ * - arcs (Array): Array of arc objects defining connections between locations.
  * 
  * Methods:
  * - setZoom(zoomLevel): Sets the zoom level programmatically.
  * - getZoom(): Retrieves the current zoom level.
  * - addLocation(location): Adds a new location to the globe.
  * - removeLocation(name): Removes a location from the globe by name.
+ * - addArc(arc): Adds a new arc between two locations.
+ * - removeArc(label): Removes an existing arc based on its label.
  * 
  * Usage:
  * <globe-component
@@ -31,6 +34,10 @@ import worldData from './data/world-110m.v1.json';
  *     {"name": "London", "coordinates": [-0.1278, 51.5074]},
  *     {"name": "Tokyo", "coordinates": [139.6917, 35.6895]},
  *     {"name": "Sydney", "coordinates": [151.2093, -33.8688]}
+ *   ]'
+ *   arcs='[
+ *     {"source": "New York", "target": "London", "color": "green", "label": "NY-LON"},
+ *     {"source": "Tokyo", "target": "Sydney", "color": "purple", "label": "TOK-SYD"}
  *   ]'
  *   style="width: 600px; height: 600px;"
  * ></globe-component>
@@ -48,6 +55,22 @@ class GlobeComponent extends LitElement {
               return JSON.parse(value);
             } catch (e) {
               console.error('Invalid JSON for locations:', e);
+              return [];
+            }
+          }
+          return value;
+        }
+      }
+    },
+    arcs: {
+      type: Array,
+      converter: {
+        fromAttribute(value) {
+          if (typeof value === 'string') {
+            try {
+              return JSON.parse(value);
+            } catch (e) {
+              console.error('Invalid JSON for arcs:', e);
               return [];
             }
           }
@@ -83,8 +106,14 @@ class GlobeComponent extends LitElement {
     }
     .arc {
       fill: none;
-      stroke: blue;
-      stroke-width: 1px;
+      stroke-width: 3px; /* Increased stroke width */
+      opacity: 0.8; /* Slight opacity for better visibility */
+    }
+    .arc-label {
+      font-size: 14px; /* Increased font size */
+      fill: yellow; /* Changed to yellow for better contrast */
+      stroke: black; /* Outline for readability */
+      stroke-width: 0.5px;
     }
     .point {
       fill: red;
@@ -114,8 +143,11 @@ class GlobeComponent extends LitElement {
       { name: 'Tokyo', coordinates: [139.6917, 35.6895] },
     ];
 
-    // Initialize arcs array
-    this.arcs = [];
+    // Default arcs
+    this.arcs = [
+      { "source": "New York", "target": "London", "color": "green", "label": "NY-LON" },
+      { "source": "Tokyo", "target": "London", "color": "purple", "label": "TOK-SYD" }
+    ];
 
     // Placeholder for zoom behavior
     this.zoom = null;
@@ -125,7 +157,7 @@ class GlobeComponent extends LitElement {
   }
 
   render() {
-    return html`<div id="globe-container"></div>`;
+    return html`<div id="globe-container" role="img" aria-label="Interactive 3D Globe"></div>`;
   }
 
   firstUpdated() {
@@ -187,21 +219,17 @@ class GlobeComponent extends LitElement {
       .attr('class', 'graticule')
       .attr('d', this.path);
 
-    // Generate arcs between locations
-    this.generateArcs();
+    // Draw arcs after land and graticules
+    this.drawArcs();
 
     // Highlight all points
     this.highlightPoints();
-
-    // Draw arcs
-    this.drawArcs();
 
     // Make the globe draggable
     this.makeGlobeDraggable();
 
     // Adjust initial projection to fit all locations
     this.adjustProjectionToFitLocations();
-
   }
 
   /**
@@ -211,8 +239,8 @@ class GlobeComponent extends LitElement {
    */
   initializeZoom(width, height) {
     // Define the zoom behavior with scale limits
-    const minScale = this.initialScale / 2; // Allow zooming out to half the initial scale
-    const maxScale = this.initialScale * 3; // Allow zooming in up to 3 times the initial scale
+    const minScale = this.initialScale / 2; // Prevent zooming out too much
+    const maxScale = this.initialScale * 3; // Allow more zooming in
 
     this.zoom = d3.zoom()
       .scaleExtent([minScale, maxScale])
@@ -253,23 +281,11 @@ class GlobeComponent extends LitElement {
   }
 
   /**
-   * Generates arcs between consecutive locations.
+   * Generates arcs between specified locations.
    */
   generateArcs() {
-    this.arcs = []; // Reset arcs
-
-    for (let i = 0; i < this.locations.length - 1; i++) {
-      const source = this.locations[i].coordinates;
-      const target = this.locations[i + 1].coordinates;
-
-      // Validate coordinates
-      if (Array.isArray(source) && source.length === 2 && Array.isArray(target) && target.length === 2) {
-        const arc = this.createArc(source, target);
-        this.arcs.push(arc);
-      } else {
-        console.warn(`Invalid coordinates for locations at index ${i} and ${i + 1}.`);
-      }
-    }
+    // Since arcs are manually defined, no automatic generation is needed
+    // This function is retained for compatibility and future extensions
   }
 
   /**
@@ -277,7 +293,7 @@ class GlobeComponent extends LitElement {
    */
   highlightPoints() {
     // Remove existing points
-    this.svg.selectAll('circle.point').remove();
+    this.svg.selectAll('g.point-group').remove();
 
     // Iterate over all locations
     this.locations.forEach(location => {
@@ -292,7 +308,8 @@ class GlobeComponent extends LitElement {
           const point = this.projection([lon, lat]);
 
           // Create a group for point and tooltip
-          const pointGroup = this.svg.append('g');
+          const pointGroup = this.svg.append('g')
+            .attr('class', 'point-group');
 
           pointGroup.append('circle')
             .attr('class', 'point')
@@ -331,7 +348,7 @@ class GlobeComponent extends LitElement {
    */
   createArc(source, target) {
     const interpolate = d3.geoInterpolate(source, target);
-    const steps = 50; // Number of intermediate points for smoothness
+    const steps = 100; // Increased number of steps for smoother arcs
     const coordinates = [];
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
@@ -347,23 +364,85 @@ class GlobeComponent extends LitElement {
   }
 
   /**
-   * Draws arcs on the globe based on the generated arcs array.
+   * Draws arcs on the globe based on the arcs array.
    */
   drawArcs() {
     // Remove existing arcs
-    this.svg.selectAll('path.arc').remove();
+    this.svg.selectAll('g.arc-group').remove();
 
     // Draw the arcs
-    this.svg.append('g')
-      .selectAll('path.arc')
+    const arcGroups = this.svg.append('g')
+      .attr('class', 'arc-group')
+      .selectAll('g.arc-item')
       .data(this.arcs)
       .enter()
-      .append('path')
+      .append('g')
+      .attr('class', 'arc-item');
+
+    // Draw each arc
+    arcGroups.append('path')
       .attr('class', 'arc')
-      .attr('d', this.path)
+      .attr('d', d => {
+        // Find source and target coordinates
+        const sourceLoc = this.locations.find(loc => loc.name === d.source);
+        const targetLoc = this.locations.find(loc => loc.name === d.target);
+
+        if (!sourceLoc || !targetLoc) {
+          console.warn(`Arc source or target not found: ${d.label}`);
+          return null;
+        }
+
+        // Check if both source and target are on the front side
+        const rotate = this.projection.rotate();
+        const sourceAngle = d3.geoDistance(sourceLoc.coordinates, [-rotate[0], -rotate[1]]);
+        const targetAngle = d3.geoDistance(targetLoc.coordinates, [-rotate[0], -rotate[1]]);
+
+        // Only draw arcs if both points are on the front side
+        if (sourceAngle > Math.PI / 2 || targetAngle > Math.PI / 2) {
+          return null;
+        }
+
+        return this.path(this.createArc(sourceLoc.coordinates, targetLoc.coordinates));
+      })
+      .attr('stroke', d => d.color || 'blue')
+      .attr('stroke-width', 3) // Increased stroke width for visibility
       .attr('fill', 'none')
-      .attr('stroke', 'blue')
-      .attr('stroke-width', 1);
+      .attr('opacity', 0.8) // Slight opacity for better visibility
+      .attr('pointer-events', 'none'); // Prevent arcs from capturing pointer events
+
+    // Add labels at the midpoint of each arc
+    arcGroups.append('text')
+      .attr('class', 'arc-label')
+      .attr('dy', -5) // Slightly above the arc
+      .attr('text-anchor', 'middle')
+      .attr('transform', d => {
+        // Find source and target coordinates
+        const sourceLoc = this.locations.find(loc => loc.name === d.source);
+        const targetLoc = this.locations.find(loc => loc.name === d.target);
+
+        if (!sourceLoc || !targetLoc) {
+          return 'translate(0,0)';
+        }
+
+        // Check if both points are on the front side
+        const rotate = this.projection.rotate();
+        const sourceAngle = d3.geoDistance(sourceLoc.coordinates, [-rotate[0], -rotate[1]]);
+        const targetAngle = d3.geoDistance(targetLoc.coordinates, [-rotate[0], -rotate[1]]);
+
+        if (sourceAngle > Math.PI / 2 || targetAngle > Math.PI / 2) {
+          return 'translate(0,0)';
+        }
+
+        const midpoint = d3.geoCentroid(this.createArc(sourceLoc.coordinates, targetLoc.coordinates));
+        const [x, y] = this.projection(midpoint);
+        return `translate(${x},${y})`;
+      })
+      .text(d => d.label)
+      .style('font-size', '14px') // Increased font size for better readability
+      .style('fill', 'yellow') // Changed to yellow for better contrast
+      .style('stroke', 'black') // Outline for readability
+      .style('stroke-width', '0.5px')
+      .attr('pointer-events', 'none'); // Prevent labels from capturing pointer events
   }
 
   /**
@@ -499,7 +578,7 @@ class GlobeComponent extends LitElement {
    * @param {Map} changedProperties - Properties that have changed.
    */
   updated(changedProperties) {
-    if (changedProperties.has('longitude') || changedProperties.has('latitude') || changedProperties.has('locations')) {
+    if (changedProperties.has('longitude') || changedProperties.has('latitude') || changedProperties.has('locations') || changedProperties.has('arcs')) {
       const width = this.offsetWidth;
       const height = this.offsetHeight;
 
@@ -516,8 +595,7 @@ class GlobeComponent extends LitElement {
       this.path = d3.geoPath().projection(this.projection);
       this.svg.selectAll('path').attr('d', this.path);
 
-      // Regenerate arcs based on new locations
-      this.generateArcs();
+      // Regenerate arcs based on new arcs data
       this.drawArcs();
 
       // Re-highlight points based on new locations
@@ -566,6 +644,53 @@ class GlobeComponent extends LitElement {
    */
   removeLocation(name) {
     this.locations = this.locations.filter(loc => loc.name !== name);
+
+    // Also remove any arcs associated with this location
+    this.arcs = this.arcs.filter(arc => arc.source !== name && arc.target !== name);
+  }
+
+  /**
+   * Adds a new arc between two locations with a label and color.
+   * @param {Object} arc - The arc object containing source, target, label, and color.
+   */
+  addArc(arc) {
+    const { source, target, label, color } = arc;
+
+    // Validate required properties
+    if (!source || !target || !label) {
+      console.warn('Arc must have source, target, and label:', arc);
+      return;
+    }
+
+    // Check if source and target locations exist
+    const sourceLoc = this.locations.find(loc => loc.name === source);
+    const targetLoc = this.locations.find(loc => loc.name === target);
+
+    if (!sourceLoc || !targetLoc) {
+      console.warn('Source or target location not found for arc:', arc);
+      return;
+    }
+
+    // Ensure label is unique
+    const existingArc = this.arcs.find(a => a.label === label);
+    if (existingArc) {
+      console.warn('Arc with the same label already exists:', label);
+      return;
+    }
+
+    // Add the arc
+    this.arcs = [...this.arcs, { source, target, label, color }];
+
+    // Re-adjust projection to fit all locations and arcs
+    this.adjustProjectionToFitLocations();
+  }
+
+  /**
+   * Removes an existing arc based on its label.
+   * @param {String} label - The label of the arc to remove.
+   */
+  removeArc(label) {
+    this.arcs = this.arcs.filter(arc => arc.label !== label);
   }
 }
 
