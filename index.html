@@ -6,17 +6,16 @@
   </head>
   <body>
     <script type="module" src="./globe-component.js"></script>
-    <globe-component longitude="8.5500" latitude="47.3667" locations='[
-      {"name": "Paris", "coordinates": [2.3488,48.8534]},
-      {"name": "London", "coordinates": [-0.1257,51.5085]},
-      {"name": "Milan", "coordinates": [9.1895,45.4643]},
-      {"name": "Zurich", "coordinates": [8.5500,47.3667]},
-      {"name": "Frankfurt", "coordinates": [8.6842,50.1155]}
-    ]' arcs='[
-      {"source": "Zurich", "target": "Paris", "color": "green", "label": "1"},
-      {"source": "Zurich", "target": "London", "color": "green", "label": "2"},
-      {"source": "Zurich", "target": "Milan", "color": "green", "label": "3"},
-      {"source": "Zurich", "target": "Frankfurt", "color": "green", "label": "4"}
-    ]' style="width: 400px; height: 400px;"></globe-component>
+    <globe-component
+      id="globe"
+      central-location='{"name": "Zurich", "coordinates": [8.5500,47.3667]}'
+      locations='[
+      {"name": "Paris", "coordinates": [2.3488,48.8534], "arcColor": "green"},
+      {"name": "London", "coordinates": [-0.1257,51.5085], "arcColor": "blue"},
+      {"name": "Milan", "coordinates": [9.1895,45.4643], "arcColor": "red"},
+      {"name": "Frankfurt", "coordinates": [8.6842,50.1155], "arcColor": "orange"}
+    ]'
+      style="width: 400px; height: 400px;"
+    ></globe-component>
   </body>
 </html>

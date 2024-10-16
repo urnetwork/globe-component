@@ -9,44 +9,50 @@ import worldData from './data/world-110m.v1.json';
  * GlobeComponent
  * 
  * A reusable Web Component that renders an interactive 3D globe using D3.js and TopoJSON.
- * It highlights specified locations and allows manual creation of arcs between them with labels and colors.
+ * It highlights specified locations, automatically draws arcs from a central location to each one,
+ * and displays labels above each location's dot.
  * 
  * Properties:
- * - longitude (Number): Longitude of the initial center point.
- * - latitude (Number): Latitude of the initial center point.
+ * - centralLocation (Object): The central location from which arcs originate.
  * - locations (Array): Array of location objects to highlight.
- * - arcs (Array): Array of arc objects defining connections between locations.
  * 
  * Methods:
  * - setZoom(zoomLevel): Sets the zoom level programmatically.
  * - getZoom(): Retrieves the current zoom level.
  * - addLocation(location): Adds a new location to the globe.
  * - removeLocation(name): Removes a location from the globe by name.
- * - addArc(arc): Adds a new arc between two locations.
- * - removeArc(label): Removes an existing arc based on its label.
- * - updateArc(source, target, newColor, newLabel): Updates the color and label of an existing arc based on source and target.
+ * - updateLocation(name, newLabel, newArcColor): Updates the label and arc color of a location.
  * 
  * Usage:
+ * ```html
  * <globe-component
- *   longitude="8.5500"
- *   latitude="47.3667"
+ *   central-location='{"name": "Zurich", "coordinates": [8.5500,47.3667]}'
  *   locations='[
- *     {"name": "Paris", "coordinates": [2.3488,48.8534]},
- *     {"name": "London", "coordinates": [-0.1257,51.5085]},
- *     {"name": "Milan", "coordinates": [9.1895,45.4643]},
- *     {"name": "Zurich", "coordinates": [8.5500,47.3667]},
- *     {"name": "Frankfurt", "coordinates": [8.6842,50.1155]}
- *   ]'
- *   arcs='[
- *     {"source": "Zurich", "target": "Paris", "color": "green", "label": "Zurich-Paris"}
+ *     {"name": "Paris", "coordinates": [2.3488,48.8534], "arcColor": "green"},
+ *     {"name": "London", "coordinates": [-0.1257,51.5085], "arcColor": "blue"},
+ *     {"name": "Milan", "coordinates": [9.1895,45.4643], "arcColor": "red"},
+ *     {"name": "Frankfurt", "coordinates": [8.6842,50.1155], "arcColor": "orange"}
  *   ]'
  *   style="width: 400px; height: 400px;"
  * ></globe-component>
+ * ```
  */
 class GlobeComponent extends LitElement {
   static properties = {
-    longitude: { type: Number },
-    latitude: { type: Number },
+    centralLocation: {
+      type: Object,
+      attribute: 'central-location',
+      converter: {
+        fromAttribute(value) {
+          try {
+            return JSON.parse(value);
+          } catch (e) {
+            console.error('Invalid JSON for central-location:', e);
+            return { name: 'Home', coordinates: [0, 0] };
+          }
+        }
+      }
+    },
     locations: {
       type: Array,
       converter: {
@@ -63,34 +69,20 @@ class GlobeComponent extends LitElement {
         }
       }
     },
-    arcs: {
-      type: Array,
-      converter: {
-        fromAttribute(value) {
-          if (typeof value === 'string') {
-            try {
-              return JSON.parse(value);
-            } catch (e) {
-              console.error('Invalid JSON for arcs:', e);
-              return [];
-            }
-          }
-          return value;
-        }
-      }
-    },
   };
 
   static styles = css`
     :host {
       display: block;
-      touch-action: none; /* Prevent default touch behaviors */
+      touch-action: manipulation; /* Allows pinch-zoom and disables other touch actions */
     }
     svg {
       width: 100%;
       height: 100%;
       cursor: grab;
       overflow: hidden; /* Prevent SVG elements from overflowing */
+      pointer-events: all; /* Ensure SVG captures all pointer events */
+      user-select: none; /* Prevent text selection during drag */
     }
     .land {
       fill: #FFFFFF;
@@ -110,52 +102,30 @@ class GlobeComponent extends LitElement {
       stroke-width: 3px; /* Increased stroke width */
       opacity: 0.8; /* Slight opacity for better visibility */
     }
-    .arc-label {
-      font-size: 14px; /* Consistent with point labels */
-      fill: yellow; /* Changed to yellow for better contrast */
-      stroke: black; /* Outline for readability */
-      stroke-width: 0.5px;
-    }
     .point {
-      fill: red;
       stroke: #fff;
       stroke-width: 1px;
       cursor: pointer;
     }
     .point-label {
-      font-size: 14px; /* Updated to match arc labels */
+      font-size: 16px;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
       fill: black;
       stroke: white;
       stroke-width: 0.5px;
-      pointer-events: none; /* Prevent labels from capturing pointer events */
-    }
-    .tooltip {
-      pointer-events: none;
-      font-size: 12px;
-      fill: black;
-      stroke: white;
-      stroke-width: 0.5px;
+      text-anchor: middle;
     }
   `;
 
   constructor() {
     super();
-    // Default center point (Zurich)
-    this.longitude = 8.5500;
-    this.latitude = 47.3667;
+
+    // Default central location (Zurich)
+    this.centralLocation = { name: 'Zurich', coordinates: [8.5500, 47.3667] };
 
     // Default locations
     this.locations = [
-      { name: 'Paris', coordinates: [2.3488, 48.8534] },
-      { name: 'London', coordinates: [-0.1257, 51.5085] },
-      { name: 'Milan', coordinates: [9.1895, 45.4643] },
-      { name: 'Zurich', coordinates: [8.5500, 47.3667] },
-      { name: 'Frankfurt', coordinates: [8.6842, 50.1155] }
-    ];
-
-    // Default arcs
-    this.arcs = [
-      { source: 'Zurich', target: 'Paris', color: 'green', label: 'Zurich-Paris' }
     ];
 
     // Placeholder for zoom behavior
@@ -194,7 +164,7 @@ class GlobeComponent extends LitElement {
       .scale(this.initialScale)
       .translate([width / 2, height / 2])
       .clipAngle(90)
-      .rotate([-this.longitude, -this.latitude]);
+      .rotate([-this.centralLocation.coordinates[0], -this.centralLocation.coordinates[1]]);
 
     this.path = d3.geoPath().projection(this.projection);
 
@@ -291,57 +261,59 @@ class GlobeComponent extends LitElement {
   }
 
   /**
-   * Generates arcs between specified locations.
-   */
-  generateArcs() {
-    // Since arcs are manually defined, no automatic generation is needed
-    // This function is retained for compatibility and future extensions
-  }
-
-  /**
    * Highlights all visible points on the globe with labels.
    */
   highlightPoints() {
     // Remove existing points and labels
     this.svg.selectAll('g.point-group').remove();
 
+    // Add central location point and label
+    this.addPoint(this.centralLocation, true);
+
     // Iterate over all locations
     this.locations.forEach(location => {
-      const [lon, lat] = location.coordinates;
-
-      // Validate coordinates
-      if (typeof lon === 'number' && typeof lat === 'number') {
-        const rotate = this.projection.rotate();
-        const angle = d3.geoDistance([lon, lat], [-rotate[0], -rotate[1]]);
-
-        if (angle < Math.PI / 2) { // Check if point is on the front side
-          const point = this.projection([lon, lat]);
-
-          // Create a group for point and label
-          const pointGroup = this.svg.append('g')
-            .attr('class', 'point-group');
-
-          // Draw the point
-          pointGroup.append('circle')
-            .attr('class', 'point')
-            .attr('cx', point[0])
-            .attr('cy', point[1])
-            .attr('r', 5)
-            .attr('fill', 'red')
-            .attr('stroke', '#fff')
-            .attr('stroke-width', 1);
-
-          // Add the label
-          pointGroup.append('text')
-            .attr('class', 'point-label')
-            .attr('x', point[0] + 7) // Position label slightly to the right of the point
-            .attr('y', point[1] + 4) // Vertically center the label
-            .text(location.name);
-        }
-      } else {
-        console.warn(`Invalid coordinates for location: ${location.name}`);
-      }
+      this.addPoint(location, false);
     });
+  }
+
+  /**
+   * Adds a point and label to the globe.
+   * @param {Object} location - The location object.
+   * @param {Boolean} isCentral - Whether the location is the central location.
+   */
+  addPoint(location, isCentral) {
+    const [lon, lat] = location.coordinates;
+
+    // Validate coordinates
+    if (typeof lon === 'number' && typeof lat === 'number') {
+      const rotate = this.projection.rotate();
+      const angle = d3.geoDistance([lon, lat], [-rotate[0], -rotate[1]]);
+
+      if (angle < Math.PI / 2) { // Check if point is on the front side
+        const point = this.projection([lon, lat]);
+
+        // Create a group for point and label
+        const pointGroup = this.svg.append('g')
+          .attr('class', 'point-group');
+
+        // Draw the point
+        pointGroup.append('circle')
+          .attr('class', 'point')
+          .attr('cx', point[0])
+          .attr('cy', point[1])
+          .attr('r', isCentral ? 6 : 5)
+          .attr('fill', isCentral ? 'gray' : 'red')
+
+        // Add the label above the point
+        pointGroup.append('text')
+          .attr('class', 'point-label')
+          .attr('x', point[0])
+          .attr('y', point[1] - 10) // Position label above the point
+          .text(location.name)
+      }
+    } else {
+      console.warn(`Invalid coordinates for location: ${location.name}`);
+    }
   }
 
   /**
@@ -368,7 +340,7 @@ class GlobeComponent extends LitElement {
   }
 
   /**
-   * Draws arcs on the globe based on the arcs array.
+   * Draws arcs from the central location to each other location.
    */
   drawArcs() {
     // Remove existing arcs
@@ -378,7 +350,7 @@ class GlobeComponent extends LitElement {
     const arcGroups = this.svg.append('g')
       .attr('class', 'arc-group')
       .selectAll('g.arc-item')
-      .data(this.arcs)
+      .data(this.locations)
       .enter()
       .append('g')
       .attr('class', 'arc-item');
@@ -387,14 +359,9 @@ class GlobeComponent extends LitElement {
     arcGroups.append('path')
       .attr('class', 'arc')
       .attr('d', d => {
-        // Find source and target coordinates
-        const sourceLoc = this.locations.find(loc => loc.name === d.source);
-        const targetLoc = this.locations.find(loc => loc.name === d.target);
-
-        if (!sourceLoc || !targetLoc) {
-          console.warn(`Arc source or target not found: ${d.label}`);
-          return null;
-        }
+        // Source is central location, target is the location
+        const sourceLoc = this.centralLocation;
+        const targetLoc = d;
 
         // Check if both source and target are on the front side
         const rotate = this.projection.rotate();
@@ -408,41 +375,11 @@ class GlobeComponent extends LitElement {
 
         return this.path(this.createArc(sourceLoc.coordinates, targetLoc.coordinates));
       })
-      .attr('stroke', d => d.color || 'blue')
+      .attr('stroke', d => d.arcColor || 'blue')
       .attr('stroke-width', 3) // Increased stroke width for visibility
       .attr('fill', 'none')
       .attr('opacity', 0.8) // Slight opacity for better visibility
       .attr('pointer-events', 'none'); // Prevent arcs from capturing pointer events
-
-    // Add labels at the midpoint of each arc
-    arcGroups.append('text')
-      .attr('class', 'arc-label')
-      .attr('dy', -5) // Slightly above the arc
-      .attr('text-anchor', 'middle')
-      .attr('transform', d => {
-        // Find source and target coordinates
-        const sourceLoc = this.locations.find(loc => loc.name === d.source);
-        const targetLoc = this.locations.find(loc => loc.name === d.target);
-
-        if (!sourceLoc || !targetLoc) {
-          return 'translate(0,0)';
-        }
-
-        // Check if both points are on the front side
-        const rotate = this.projection.rotate();
-        const sourceAngle = d3.geoDistance(sourceLoc.coordinates, [-rotate[0], -rotate[1]]);
-        const targetAngle = d3.geoDistance(targetLoc.coordinates, [-rotate[0], -rotate[1]]);
-
-        if (sourceAngle > Math.PI / 2 || targetAngle > Math.PI / 2) {
-          return 'translate(0,0)';
-        }
-
-        const midpoint = d3.geoCentroid(this.createArc(sourceLoc.coordinates, targetLoc.coordinates));
-        const [x, y] = this.projection(midpoint);
-        return `translate(${x},${y})`;
-      })
-      .text(d => d.label)
-      .attr('pointer-events', 'none'); // Prevent labels from capturing pointer events
   }
 
   /**
@@ -465,8 +402,8 @@ class GlobeComponent extends LitElement {
           // Get the current zoom scale
           const currentZoom = this.getZoom();
 
-          // Adjust rotation speed based on zoom level
-          const rotationFactor = 100 / currentZoom; // Increased numerator for better responsiveness
+          // Enhanced Rotation Factor
+          const rotationFactor = 100 / currentZoom; // Adjusted from 10 to 100
 
           this.projection.rotate([
             rotation[0] + (dx / 2) * rotationFactor,
@@ -494,8 +431,10 @@ class GlobeComponent extends LitElement {
   adjustProjectionToFitLocations() {
     if (this.locations.length === 0) return;
 
-    // Convert locations to GeoJSON features
-    const features = this.locations.map(loc => ({
+    // Convert locations to GeoJSON features, including central location
+    const allLocations = [this.centralLocation, ...this.locations];
+
+    const features = allLocations.map(loc => ({
       type: 'Feature',
       properties: { name: loc.name },
       geometry: {
@@ -524,9 +463,6 @@ class GlobeComponent extends LitElement {
     const radius = Math.min(this.offsetWidth, this.offsetHeight) / 2;
     const requiredScale = (marginFactor * radius) / Math.sin(maxDistance);
 
-    // **Modified Part: Remove or Lower minProjectionScale**
-    // Previously: const minProjectionScale = this.offsetWidth / 2;
-    // Previously: const finalScale = Math.max(requiredScale, minProjectionScale);
     const finalScale = requiredScale; // Set finalScale solely based on requiredScale
 
     // Update projection's rotation to center on centroid
@@ -545,7 +481,6 @@ class GlobeComponent extends LitElement {
 
     // Re-render the globe, arcs, and points
     this.svg.selectAll('path').attr('d', this.path);
-    this.generateArcs();
     this.drawArcs();
     this.highlightPoints();
 
@@ -580,7 +515,6 @@ class GlobeComponent extends LitElement {
     // Re-render the globe, arcs, and points
     this.path = d3.geoPath().projection(this.projection);
     this.svg.selectAll('path').attr('d', this.path);
-    this.generateArcs();
     this.drawArcs();
     this.highlightPoints();
 
@@ -593,27 +527,20 @@ class GlobeComponent extends LitElement {
    * @param {Map} changedProperties - Properties that have changed.
    */
   updated(changedProperties) {
-    if (changedProperties.has('longitude') || changedProperties.has('latitude') || changedProperties.has('locations') || changedProperties.has('arcs')) {
+    if (changedProperties.has('centralLocation') || changedProperties.has('locations')) {
       const width = this.offsetWidth;
       const height = this.offsetHeight;
 
-      if (this.locations.length > 0) {
-        const firstLocation = this.locations[0].coordinates;
-        this.projection
-          .rotate([-firstLocation[0], -firstLocation[1]]);
-      } else {
-        this.projection
-          .rotate([-this.longitude, -this.latitude]);
-      }
+      // Update projection rotation to center on the central location
+      this.projection
+        .rotate([-this.centralLocation.coordinates[0], -this.centralLocation.coordinates[1]]);
 
       // Update path with the new projection
       this.path = d3.geoPath().projection(this.projection);
       this.svg.selectAll('path').attr('d', this.path);
 
-      // Regenerate arcs based on new arcs data
+      // Re-draw arcs and points
       this.drawArcs();
-
-      // Re-highlight points based on new locations
       this.highlightPoints();
 
       // Adjust projection to fit locations
@@ -653,6 +580,9 @@ class GlobeComponent extends LitElement {
         return;
       }
       this.locations = [...this.locations, location];
+
+      // Adjust projection to fit new location
+      this.adjustProjectionToFitLocations();
     } else {
       console.warn('Invalid location format:', location);
     }
@@ -665,84 +595,29 @@ class GlobeComponent extends LitElement {
   removeLocation(name) {
     this.locations = this.locations.filter(loc => loc.name !== name);
 
-    // Also remove any arcs associated with this location
-    this.arcs = this.arcs.filter(arc => arc.source !== name && arc.target !== name);
-  }
-
-  /**
-   * Adds a new arc between two locations with a label and color.
-   * @param {Object} arc - The arc object containing source, target, label, and color.
-   */
-  addArc(arc) {
-    const { source, target, label, color } = arc;
-
-    // Validate required properties
-    if (!source || !target || !label) {
-      console.warn('Arc must have source, target, and label:', arc);
-      return;
-    }
-
-    // Check if source and target locations exist
-    const sourceLoc = this.locations.find(loc => loc.name === source);
-    const targetLoc = this.locations.find(loc => loc.name === target);
-
-    if (!sourceLoc || !targetLoc) {
-      console.warn('Source or target location not found for arc:', arc);
-      return;
-    }
-
-    // Ensure label is unique
-    const existingArc = this.arcs.find(a => a.label === label);
-    if (existingArc) {
-      console.warn('Arc with the same label already exists:', label);
-      return;
-    }
-
-    // Add the arc
-    this.arcs = [...this.arcs, { source, target, label, color }];
-
-    // Re-adjust projection to fit all locations and arcs
+    // Re-adjust projection to fit remaining locations
     this.adjustProjectionToFitLocations();
   }
 
   /**
-   * Removes an existing arc based on its label.
-   * @param {String} label - The label of the arc to remove.
+   * Updates the label and arc color of an existing location.
+   * @param {String} name - The name of the location to update.
+   * @param {String} newLabel - The new label for the location.
+   * @param {String} newArcColor - The new color for the arc.
    */
-  removeArc(label) {
-    this.arcs = this.arcs.filter(arc => arc.label !== label);
-  }
+  updateLocationArcColor(name, newArcColor) {
+    const locIndex = this.locations.findIndex(loc => loc.name === name);
 
-  /**
-   * Updates the color and label of an existing arc based on its source and target.
-   * @param {String} source - The name of the source location.
-   * @param {String} target - The name of the target location.
-   * @param {String} newColor - The new color for the arc.
-   * @param {String} newLabel - The new label for the arc.
-   */
-  updateArc(source, target, newColor, newLabel) {
-    // Find all arcs matching the source and target
-    const matchingArcs = this.arcs.filter(arc => arc.source === source && arc.target === target);
-
-    if (matchingArcs.length === 0) {
-      console.warn(`No arc found between "${source}" and "${target}".`);
+    if (locIndex === -1) {
+      console.warn(`Location with name "${name}" not found.`);
       return;
     }
 
-    if (matchingArcs.length > 1) {
-      console.warn(`Multiple arcs found between "${source}" and "${target}". Please ensure uniqueness or extend the method to handle multiple arcs.`);
-      return;
-    }
+    // Update the location's arc color
+    this.locations[locIndex].arcColor = newArcColor || this.locations[locIndex].arcColor;
 
-    // Update the arc's color and label
-    const arcIndex = this.arcs.findIndex(arc => arc.source === source && arc.target === target);
-    this.arcs[arcIndex].color = newColor;
-    this.arcs[arcIndex].label = newLabel;
-
-    // Trigger re-rendering by updating the arcs array
-    this.arcs = [...this.arcs];
-
-    // Re-render the arcs
+    // Re-render the globe
+    this.highlightPoints();
     this.drawArcs();
   }
 
